@@ -105,14 +105,17 @@ def scrape_reddit():
     current_posts = []
     file_index = 1
     total_size = 0
-    post_limit = 1000  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
+    post_limit = 100  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
+    streams = ['hot']  # Streams to scrape from.
+
+    print(f"Scraping started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Iterate through each subreddit.
     for subreddit_name in subreddits:
         subreddit = reddit.subreddit(subreddit_name.strip())
 
         # Scrape posts from multiple streams (hot, new, top).
-        for stream in ['hot', 'new', 'top']:
+        for stream in streams:
             print(f"Scraping {stream} posts from r/{subreddit_name.strip()}...")
 
             # Scrape posts from the specified stream.
@@ -147,7 +150,7 @@ def scrape_reddit():
                     current_posts.append(post_data)
 
                     # Check file size and save if necessary (~10MB).
-                    if len(current_posts) >= 1000:
+                    if len(current_posts) >= 100:
                         file_size = save_posts(current_posts, file_index, output_dir)
                         total_size += file_size
                         print(f"Saved {len(current_posts)} posts to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
@@ -170,6 +173,7 @@ def scrape_reddit():
 
     # Print the total size of the scraped data.
     print(f"Total size of scraped data: {total_size / (1024 * 1024):.2f} MB")
+    print(f"Scraping finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if __name__ == "__main__":
     # Call our scrape_reddit function to start the scraping process.

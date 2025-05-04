@@ -1,5 +1,3 @@
 python
 programming
 coding
-machine learning
-deep learning
