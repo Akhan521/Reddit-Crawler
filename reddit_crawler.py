@@ -156,6 +156,7 @@ def scrape_reddit():
                     # Append the post data to the current posts list.
                     current_posts.append(post_data)
 
+                    # Can maybe add another way to look at duplicate? Like looking at title and seeing if similar?
                     # Add post ID to hash if visited already
                     seen_ids.add(post.id)
 
