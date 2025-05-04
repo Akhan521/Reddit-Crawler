@@ -79,6 +79,21 @@ def load_keywords(file_path):
         return keywords
     except FileNotFoundError:
         raise FileNotFoundError(f"Keywords file '{file_path}' not found.")
+    
+# Function to load existing posts so we can check for duplicate posts
+def load_existing_post_ids(output_dir):
+    seen_ids = set()
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.json'):
+            filepath = os.path.join(output_dir, filename)
+            with open(filepath, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        post = json.loads(line)
+                        seen_ids.add(post['id'])
+                    except json.JSONDecodeError:
+                        continue
+    return seen_ids
 
 # Main function to scrape Reddit posts.
 def scrape_reddit():
@@ -108,8 +123,8 @@ def scrape_reddit():
     post_limit = 100  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
     streams = ['hot']  # Streams to scrape from.
 
-    # Initialize Set for hashing post ID's
-    seen_ids = set()
+    # Initialize Set for hashing post ID's with existing data if it exists
+    seen_ids = load_existing_post_ids(output_dir)
 
     print(f"Scraping started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
