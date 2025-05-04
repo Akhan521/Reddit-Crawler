@@ -15,6 +15,7 @@ from datetime import datetime
 import pandas as pd
 from bs4 import BeautifulSoup
 import argparse
+import re
 
 # Set up command line argument parsing.
 def parse_arguments():
@@ -41,6 +42,24 @@ def extract_page_title(url):
     except requests.RequestException as e:
         print(f"Error fetching page title: {e}")
         return None
+
+# Extract URL using regex
+def extract_urls(text): 
+    url_regex = r'https?://[^\s)>"\'\]]+'
+    return re.findall(url_regex, text)
+
+# Enrich post with titles
+def enrich_post_with_titles(post):
+    selftext = post.get('selftext', '')
+    urls = extract_urls(selftext)
+    titles = []
+    for url in urls:
+        title = extract_page_title(url)
+        if title:
+            titles.append(title)
+    if titles:
+        post['linked_titles'] = titles
+    return post
 
 # Save posts to a JSON file.
 def save_posts(posts, file_index, output_dir):
@@ -169,6 +188,7 @@ def scrape_reddit():
                     }
 
                     # Append the post data to the current posts list.
+                    post_data = enrich_post_with_titles(post_data)
                     current_posts.append(post_data)
 
                     # Can maybe add another way to look at duplicate? Like looking at title and seeing if similar?
