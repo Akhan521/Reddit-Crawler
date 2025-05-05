@@ -1,81 +1,102 @@
-software development
-coding practices
-python programming
-javascript frameworks
-java applications
-web development
-devops tools
-software architecture
-machine learning models
-deep learning techniques
-data science projects
-artificial intelligence
-natural language processing
-computer vision
-tensorflow tutorial
-pytorch implementation
-ai ethics
-data engineering
-big data analytics
-cloud infrastructure
-agile methodology
-open source projects
-software testing
-robotics programming
-neural networks
-data mining techniques
-automl tools
-software deployment
-programming paradigms
-machine learning algorithms
-programming basics
-cpp coding
-csharp development
-golang concurrency
-ruby on rails
-sql queries
-nosql databases
-backend optimization
-frontend design
-fullstack projects
-react components
-angular directives
-vue lifecycle
-node js
-django models
-flask api
-spring boot
-dotnet core
-kubernetes deployment
-aws lambda
-azure functions
-gcp machine learning
-security protocols
+programming
+coding
+python
+java
+javascript
+cpp
+csharp
+golang
+ruby
+sql
+nosql
+backend
+frontend
+fullstack
+react
+angular
+vue
+node
+django
+flask
+spring
+dotnet
+kubernetes
+aws
+azure
+gcp
+security
 ethical hacking
-git workflows
-ci/cd pipelines
-unit testing
-uiux design
-graphql schema
-microservices architecture
-serverless computing
-iot applications
-blockchain smart contracts
-game ai algorithms
+git
+cicd
+testing
+uiux
+graphql
+microservices
+serverless
+iot
+blockchain
+game ai
 reinforcement learning
-statistical modeling
+statistics
 data visualization
-kaggle datasets
-huggingface transformers
+kaggle
+huggingface
 large language models
 generative ai
 ai ethics
 prompt engineering
-mlops pipelines
+mlops
 edge computing
 quantum computing
-bioinformatics tools
+bioinformatics
 r programming
-java oop
-javascript es6
-linux scripting
+object oriented
+functional programming
+api
+rest
+microservices
+docker
+kubernetes
+cloud
+devops
+software engineering
+web development
+mobile development
+data science
+machine learning
+deep learning
+neural networks
+tensorflow
+pytorch
+nlp
+computer vision
+data engineering
+big data
+data analysis
+algorithm
+data structure
+optimization
+debugging
+automation
+version control
+agile
+scrum
+unit testing
+integration testing
+performance tuning
+code review
+software design
+architecture
+deployment
+continuous integration
+continuous deployment
+machine learning models
+feature engineering
+data preprocessing
+model training
+hyperparameter tuning
+evaluation metrics
+natural language processing
+image recognition
+predictive analytics
+real time processing

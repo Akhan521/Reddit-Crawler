@@ -19,6 +19,8 @@ import argparse
 import re
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 # Set up command line argument parsing.
 def parse_arguments():
@@ -71,13 +73,13 @@ def enrich_post_with_titles(post):
         title = extract_page_title(url)
         if title:
             titles.append(title)
-        time.sleep(1)  # Add delay to avoid overwhelming servers.
+        time.sleep(3)  # Add delay to avoid overwhelming servers.
     if titles:
         post['linked_titles'] = titles
     return post
 
 # Save posts to a JSON file.
-def save_posts(posts, file_index, output_dir):
+def save_posts(posts, file_index, output_dir, lock):
     # Create the output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
 
@@ -85,9 +87,11 @@ def save_posts(posts, file_index, output_dir):
     filepath = os.path.join(output_dir, f'reddit_posts_{file_index}.json')
 
     # Save the posts to a JSON file.
-    with open(filepath, 'w', encoding='utf-8') as f:
-        for post in posts:
-            f.write(json.dumps(post, ensure_ascii=False) + '\n')
+    # To ensure thread safety, we use a lock.
+    with lock:
+        with open(filepath, 'a', encoding='utf-8') as f:
+            for post in posts:
+                f.write(json.dumps(post, ensure_ascii=False) + '\n')
 
     # Return the file size.
     return os.path.getsize(filepath)
@@ -129,6 +133,94 @@ def load_existing_post_ids(output_dir):
                         continue
     return seen_ids
 
+# Threading: function to scrape a subreddit per thread.
+def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, seen_ids, lock, file_index):
+    reddit = praw.Reddit("DEFAULT")
+    current_posts = []
+    total_size = 0
+    post_limit = 10000
+    streams = ['hot', 'top', 'new']
+
+    # Check if the subreddit is valid and accessible.
+    try:
+        subreddit = reddit.subreddit(subreddit_name.strip())
+        next(subreddit.hot(limit=1))  # Test subreddit accessibility.
+    except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
+        print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
+        return 0
+
+    # Scrape posts from multiple streams (hot, new, top).
+    for stream in streams:
+        print(f"Thread: scraping {stream} posts from r/{subreddit_name.strip()}...")
+        try:
+            for post in getattr(subreddit, stream)(limit=post_limit * 5):
+                content = post.title.lower() + ' ' + post.selftext.lower()
+                if any(keyword.lower() in content for keyword in keywords):
+                    # Check if the post ID is already in the seen IDs set.
+                    if post.id in seen_ids:
+                        continue
+
+                    post_data = {
+                        'id': post.id,
+                        'title': post.title,
+                        'selftext': post.selftext,
+                        'url': post.url,
+                        'subreddit': str(post.subreddit),
+                        'score': post.score,
+                        'upvote_ratio': post.upvote_ratio,
+                    }
+
+                    # Append the post data to the current posts list.
+                    current_posts.append(post_data)
+                    seen_ids.add(post.id)
+
+                    # Scrape comments as well.
+                    post.comments.replace_more(limit=None)
+                    for comment in post.comments.list():
+                        if comment.id in seen_ids:
+                            continue
+                        comment_data = {
+                            'id': comment.id,
+                            'body': comment.body,
+                            'author': str(comment.author),
+                            'score': comment.score,
+                        }
+                        current_posts.append(comment_data)
+                        seen_ids.add(comment.id)
+
+                    # Check file size and save if necessary (~10MB).
+                    if len(current_posts) >= post_limit:
+                        # To ensure thread safety, we use a lock.
+                        with lock:
+                            file_size = save_posts(current_posts, file_index[0], output_dir, lock)
+                            total_size += file_size
+                            print(f"Thread: saved {len(current_posts)} items to reddit_posts_{file_index[0]}.json ({file_size / (1024 * 1024):.2f} MB)")
+                            current_posts = []
+                            file_index[0] += 1
+
+                # If we reached the target size, break out of the loop.
+                if total_size >= target_size_bytes:
+                    break
+
+        # If we had an invalid subreddit, we can skip to the next one.
+        except prawcore.exceptions.RequestException as e:
+            print(f"Error scraping {stream} posts from r/{subreddit_name.strip()}: {e}")
+            continue
+
+        # If we reached the target size, break out of the loop.
+        if total_size >= target_size_bytes:
+            break
+
+    # If there are any remaining posts, save them.
+    if current_posts:
+        with lock:
+            file_size = save_posts(current_posts, file_index[0], output_dir, lock)
+            total_size += file_size
+            print(f"Thread: saved {len(current_posts)} items to reddit_posts_{file_index.value}.json ({file_size / (1024 * 1024):.2f} MB)")
+            file_index[0] += 1
+
+    return total_size
+
 # Main function to scrape Reddit posts.
 def scrape_reddit():
     # Parse command line arguments.
@@ -150,123 +242,29 @@ def scrape_reddit():
     # Create the output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
 
-    # Initialize variables.
-    current_posts = []
-    file_index = 1
-    total_size = 0
-    post_limit = 10000  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
-    streams = ['hot', 'top', 'new']  # Streams to scrape from.
+    # Create a lock for thread safety.
+    lock = Lock()
 
-    # Initialize Set for hashing post ID's with existing data if it exists
+    # Initialize variables.
+    file_index = [500] # Using a list to make it mutable in threads.
     seen_ids = load_existing_post_ids(output_dir)
 
     print(f"Scraping started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Iterate through each subreddit.
-    for subreddit_name in subreddits:
-        try:
-            subreddit = reddit.subreddit(subreddit_name.strip())
-        except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
-            print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
-            continue
+    # Split the subreddits into chunks for threading.
+    num_threads = min(10, len(subreddits)) # Limit to 10 threads.
+    subreddit_chunks = [subreddits[i::num_threads] for i in range(num_threads)]
 
-        # Scrape posts from multiple streams (hot, new, top).
-        for stream in streams:
-            print(f"Scraping {stream} posts from r/{subreddit_name.strip()}...")
-            try:
-                # Scrape posts from the specified stream.
-                for post in getattr(subreddit, stream)(limit=post_limit):
-                    # If we've reached the target size, we can stop.
-                    if total_size >= target_size_bytes:
-                        print(f"Target size of {target_size_mb} MB reached. Stopping scraping.")
-                        break
-
-                    # Otherwise, check if the post contains any of the keywords.
-                    content = post.title.lower() + ' ' + post.selftext.lower()
-                    if any(keyword.lower() in content for keyword in keywords):
-                        # Extract the page title if the post has a URL.
-                        if isinstance(post.url, str) and post.url and not post.url.endswith(('.jpg', '.png', '.gif')):
-                            page_title = extract_page_title(post.url)
-                            # Add a delay to avoid overwhelming the server.
-                            time.sleep(1)
-
-                        # Don't append post if post ID is already in hash
-                        if post.id in seen_ids:
-                            continue
-                        
-                        # Create a dictionary to store the post data.
-                        post_data = {
-                            'id': post.id,
-                            'title': post.title,
-                            'selftext': post.selftext,
-                            'url': post.url,
-                            'subreddit': str(post.subreddit),
-                            'score': post.score,
-                            'upvote_ratio': post.upvote_ratio,
-                            'page_title': page_title if post.url else None,
-                        }
-
-                        # Append the post data to the current posts list.
-                        post_data = enrich_post_with_titles(post_data)
-                        current_posts.append(post_data)
-
-                        # Add the post ID to the seen IDs set.
-                        seen_ids.add(post.id)
-
-                        # Check file size and save if necessary (~10MB).
-                        if len(current_posts) >= 5000:
-                            file_size = save_posts(current_posts, file_index, output_dir)
-                            total_size += file_size
-                            print(f"Saved {len(current_posts)} posts to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
-                            current_posts = []
-                            file_index += 1
-
-                        # Scrape comments as well.
-                        post.comments.replace_more(limit=None)
-                        for comment in post.comments.list():
-                            comment_data = {
-                                'id': comment.id,
-                                'body': comment.body,
-                                'author': str(comment.author),
-                                'score': comment.score,
-                            }
-
-                            if comment.id in seen_ids:
-                                continue
-                            current_posts.append(comment_data)
-                            seen_ids.add(comment.id)
-
-                            # Check file size and save if necessary (~10MB).
-                            if len(current_posts) >= 5000:
-                                file_size = save_posts(current_posts, file_index, output_dir)
-                                total_size += file_size
-                                print(f"Saved {len(current_posts)} comments to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
-                                current_posts = []
-                                file_index += 1
-
-                    # If we reached the target size, break out of the loop.
-                    if total_size >= target_size_bytes:
-                        print(f"Target size of {target_size_mb} MB reached. Stopping scraping.")
-                        break
-
-            # If we had an invalid subreddit, we can skip to the next one.
-            except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
-                print(f"Skipping invalid or inaccessible subreddit '{subreddit_name.strip()}': {e}")
-                continue
-
-            # If we reached the target size, break out of the loop.
-            if total_size >= target_size_bytes:
-                break
-
-        # If we reached the target size, break out of the outer loop.
-        if total_size >= target_size_bytes:
-            break
-
-    # If there are any remaining posts, save them.
-    if current_posts:
-        file_size = save_posts(current_posts, file_index, output_dir)
-        total_size += file_size
-        print(f"Saved {len(current_posts)} posts to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
+    # Use ThreadPoolExecutor to scrape subreddits in parallel.
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = []
+        for i, chunk in enumerate(subreddit_chunks):
+            for subreddit_name in chunk:
+                futures.append(executor.submit(scrape_subreddit, subreddit_name, keywords, output_dir,
+                                               target_size_bytes, seen_ids, lock, file_index))
+                
+        # Wait for all threads to complete and compute the total size.
+        total_size = sum(f.result() for f in futures if f.result() is not None)
 
     # Print the total size of the scraped data.
     print(f"Total size of scraped data: {total_size / (1024 * 1024):.2f} MB")
