@@ -1,3 +1,81 @@
-python
-programming
-coding
+software development
+coding practices
+python programming
+javascript frameworks
+java applications
+web development
+devops tools
+software architecture
+machine learning models
+deep learning techniques
+data science projects
+artificial intelligence
+natural language processing
+computer vision
+tensorflow tutorial
+pytorch implementation
+ai ethics
+data engineering
+big data analytics
+cloud infrastructure
+agile methodology
+open source projects
+software testing
+robotics programming
+neural networks
+data mining techniques
+automl tools
+software deployment
+programming paradigms
+machine learning algorithms
+programming basics
+cpp coding
+csharp development
+golang concurrency
+ruby on rails
+sql queries
+nosql databases
+backend optimization
+frontend design
+fullstack projects
+react components
+angular directives
+vue lifecycle
+node js
+django models
+flask api
+spring boot
+dotnet core
+kubernetes deployment
+aws lambda
+azure functions
+gcp machine learning
+security protocols
+ethical hacking
+git workflows
+ci/cd pipelines
+unit testing
+uiux design
+graphql schema
+microservices architecture
+serverless computing
+iot applications
+blockchain smart contracts
+game ai algorithms
+reinforcement learning
+statistical modeling
+data visualization
+kaggle datasets
+huggingface transformers
+large language models
+generative ai
+ai ethics
+prompt engineering
+mlops pipelines
+edge computing
+quantum computing
+bioinformatics tools
+r programming
+java oop
+javascript es6
+linux scripting

@@ -9,6 +9,7 @@ To avoid duplicate data, the script checks for existing posts and only saves new
 import praw
 import json
 import os
+import prawcore
 import time
 import requests
 from datetime import datetime
@@ -16,6 +17,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import argparse
 import re
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Set up command line argument parsing.
 def parse_arguments():
@@ -26,19 +29,30 @@ def parse_arguments():
     parser.add_argument('target_size_mb', type=float, help='Target data size in MB')
     return parser.parse_args()
 
+# Set up a session with retries for HTTP requests.
+def create_requests_session():
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
 # Title extraction function.
 def extract_page_title(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        # Create a session with retries.
+        session = create_requests_session()
+        response = session.get(url, headers=headers, timeout=15)
         # If we have a successful (200) response, parse the HTML if we have an HTML page.
         if response.status_code == 200 and 'text/html' in response.headers.get('Content-Type', ''):
             # Use BeautifulSoup to parse the HTML and extract the title.
             soup = BeautifulSoup(response.text, 'html.parser')
-            title = soup.title.string.strip() if soup.title else 'No Title'
-            return title
-        else:
-            return None
+            if soup.title and soup.title.string:
+                return soup.title.string.strip()
+            return "No Title"
+        return None
     except requests.RequestException as e:
         print(f"Error fetching page title: {e}")
         return None
@@ -57,6 +71,7 @@ def enrich_post_with_titles(post):
         title = extract_page_title(url)
         if title:
             titles.append(title)
+        time.sleep(1)  # Add delay to avoid overwhelming servers.
     if titles:
         post['linked_titles'] = titles
     return post
@@ -139,8 +154,8 @@ def scrape_reddit():
     current_posts = []
     file_index = 1
     total_size = 0
-    post_limit = 100  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
-    streams = ['hot']  # Streams to scrape from.
+    post_limit = 10000  # Limit for the number of posts to scrape from each subreddit per stream (e.g. hot, new, etc.)
+    streams = ['hot', 'top', 'new']  # Streams to scrape from.
 
     # Initialize Set for hashing post ID's with existing data if it exists
     seen_ids = load_existing_post_ids(output_dir)
@@ -149,59 +164,95 @@ def scrape_reddit():
 
     # Iterate through each subreddit.
     for subreddit_name in subreddits:
-        subreddit = reddit.subreddit(subreddit_name.strip())
+        try:
+            subreddit = reddit.subreddit(subreddit_name.strip())
+        except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
+            print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
+            continue
 
         # Scrape posts from multiple streams (hot, new, top).
         for stream in streams:
             print(f"Scraping {stream} posts from r/{subreddit_name.strip()}...")
+            try:
+                # Scrape posts from the specified stream.
+                for post in getattr(subreddit, stream)(limit=post_limit):
+                    # If we've reached the target size, we can stop.
+                    if total_size >= target_size_bytes:
+                        print(f"Target size of {target_size_mb} MB reached. Stopping scraping.")
+                        break
 
-            # Scrape posts from the specified stream.
-            for post in getattr(subreddit, stream)(limit=post_limit):
-                # If we've reached the target size, we can stop.
-                if total_size >= target_size_bytes:
-                    print(f"Target size of {target_size_mb} MB reached. Stopping scraping.")
-                    break
+                    # Otherwise, check if the post contains any of the keywords.
+                    content = post.title.lower() + ' ' + post.selftext.lower()
+                    if any(keyword.lower() in content for keyword in keywords):
+                        # Extract the page title if the post has a URL.
+                        if isinstance(post.url, str) and post.url and not post.url.endswith(('.jpg', '.png', '.gif')):
+                            page_title = extract_page_title(post.url)
+                            # Add a delay to avoid overwhelming the server.
+                            time.sleep(1)
 
-                # Otherwise, check if the post contains any of the keywords.
-                content = post.title.lower() + ' ' + post.selftext.lower()
-                if any(keyword.lower() in content for keyword in keywords):
-                    # Extract the page title if the post has a URL.
-                    if isinstance(post.url, str) and post.url and not post.url.endswith(('.jpg', '.png', '.gif')):
-                        page_title = extract_page_title(post.url)
-                        # Add a delay to avoid overwhelming the server.
-                        time.sleep(1)
+                        # Don't append post if post ID is already in hash
+                        if post.id in seen_ids:
+                            continue
+                        
+                        # Create a dictionary to store the post data.
+                        post_data = {
+                            'id': post.id,
+                            'title': post.title,
+                            'selftext': post.selftext,
+                            'url': post.url,
+                            'subreddit': str(post.subreddit),
+                            'score': post.score,
+                            'upvote_ratio': post.upvote_ratio,
+                            'page_title': page_title if post.url else None,
+                        }
 
-                    # Don't append post if post ID is already in hash
-                    if post.id in seen_ids:
-                        continue
-                    
-                    # Create a dictionary to store the post data.
-                    post_data = {
-                        'id': post.id,
-                        'title': post.title,
-                        'selftext': post.selftext,
-                        'url': post.url,
-                        'subreddit': str(post.subreddit),
-                        'score': post.score,
-                        'upvote_ratio': post.upvote_ratio,
-                        'page_title': page_title if post.url else None,
-                    }
+                        # Append the post data to the current posts list.
+                        post_data = enrich_post_with_titles(post_data)
+                        current_posts.append(post_data)
 
-                    # Append the post data to the current posts list.
-                    post_data = enrich_post_with_titles(post_data)
-                    current_posts.append(post_data)
+                        # Add the post ID to the seen IDs set.
+                        seen_ids.add(post.id)
 
-                    # Can maybe add another way to look at duplicate? Like looking at title and seeing if similar?
-                    # Add post ID to hash if visited already
-                    seen_ids.add(post.id)
+                        # Check file size and save if necessary (~10MB).
+                        if len(current_posts) >= 5000:
+                            file_size = save_posts(current_posts, file_index, output_dir)
+                            total_size += file_size
+                            print(f"Saved {len(current_posts)} posts to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
+                            current_posts = []
+                            file_index += 1
 
-                    # Check file size and save if necessary (~10MB).
-                    if len(current_posts) >= 100:
-                        file_size = save_posts(current_posts, file_index, output_dir)
-                        total_size += file_size
-                        print(f"Saved {len(current_posts)} posts to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
-                        current_posts = []
-                        file_index += 1
+                        # Scrape comments as well.
+                        post.comments.replace_more(limit=None)
+                        for comment in post.comments.list():
+                            comment_data = {
+                                'id': comment.id,
+                                'body': comment.body,
+                                'author': str(comment.author),
+                                'score': comment.score,
+                            }
+
+                            if comment.id in seen_ids:
+                                continue
+                            current_posts.append(comment_data)
+                            seen_ids.add(comment.id)
+
+                            # Check file size and save if necessary (~10MB).
+                            if len(current_posts) >= 5000:
+                                file_size = save_posts(current_posts, file_index, output_dir)
+                                total_size += file_size
+                                print(f"Saved {len(current_posts)} comments to reddit_posts_{file_index}.json' ({file_size / (1024 * 1024):.2f} MB)")
+                                current_posts = []
+                                file_index += 1
+
+                    # If we reached the target size, break out of the loop.
+                    if total_size >= target_size_bytes:
+                        print(f"Target size of {target_size_mb} MB reached. Stopping scraping.")
+                        break
+
+            # If we had an invalid subreddit, we can skip to the next one.
+            except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
+                print(f"Skipping invalid or inaccessible subreddit '{subreddit_name.strip()}': {e}")
+                continue
 
             # If we reached the target size, break out of the loop.
             if total_size >= target_size_bytes:
