@@ -20,8 +20,7 @@ import re
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
-
+from threading import Lock, Semaphore
 # Set up command line argument parsing.
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Reddit Crawler')
@@ -134,20 +133,40 @@ def load_existing_post_ids(output_dir):
     return seen_ids
 
 # Threading: function to scrape a subreddit per thread.
-def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, seen_ids, lock, file_index):
+def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, seen_ids, lock, rate_limit, file_index):
     reddit = praw.Reddit("DEFAULT")
     current_posts = []
     total_size = 0
     post_limit = 10000
     streams = ['hot', 'top', 'new']
 
-    # Check if the subreddit is valid and accessible.
-    try:
-        subreddit = reddit.subreddit(subreddit_name.strip())
-        next(subreddit.hot(limit=1))  # Test subreddit accessibility.
-    except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
-        print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
-        return 0
+    # Retry mechanism for subreddit access.
+    max_retries = 3
+    retry_delay = 5 # Initial delay in seconds.
+
+    for attempt in range(max_retries + 1):
+        # If we couldn't access the subreddit after all retries, skip it.
+        if attempt == max_retries:
+            print(f"Failed to access subreddit '{subreddit_name.strip()}' after {max_retries} attempts. Skipping.")
+            return 0
+    
+        try:
+            with rate_limit:
+                # Attempt to access the subreddit.
+                subreddit = reddit.subreddit(subreddit_name.strip())
+                next(subreddit.hot(limit=1))  # Test subreddit accessibility.
+            break
+        except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
+            print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
+            return 0
+        except prawcore.exceptions.RequestException as e:
+            print(f"Error accessing subreddit '{subreddit_name.strip()}': {e}")
+            print(f"Retrying in {retry_delay} seconds. Attempt {attempt + 1} / {max_retries}.")
+            time.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff.
+        except Exception as e:
+            print(f"Unexpected error accessing subreddit '{subreddit_name.strip()}': {e}")
+            return 0
 
     # Scrape posts from multiple streams (hot, new, top).
     for stream in streams:
@@ -174,8 +193,9 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
                     current_posts.append(post_data)
                     seen_ids.add(post.id)
 
-                    # Scrape comments as well.
-                    post.comments.replace_more(limit=None)
+                    # Scraping comments while staying within the rate limit.
+                    with rate_limit:
+                        post.comments.replace_more(limit=None)
                     for comment in post.comments.list():
                         if comment.id in seen_ids:
                             continue
@@ -244,15 +264,16 @@ def scrape_reddit():
 
     # Create a lock for thread safety.
     lock = Lock()
+    rate_limit = Semaphore(60) # Limit to 60 requests per minute.
 
     # Initialize variables.
-    file_index = [500] # Using a list to make it mutable in threads.
+    file_index = [300] # Using a list to make it mutable in threads.
     seen_ids = load_existing_post_ids(output_dir)
 
     print(f"Scraping started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Split the subreddits into chunks for threading.
-    num_threads = min(10, len(subreddits)) # Limit to 10 threads.
+    num_threads = min(5, len(subreddits)) # Limit to 5 threads.
     subreddit_chunks = [subreddits[i::num_threads] for i in range(num_threads)]
 
     # Use ThreadPoolExecutor to scrape subreddits in parallel.
@@ -261,7 +282,7 @@ def scrape_reddit():
         for i, chunk in enumerate(subreddit_chunks):
             for subreddit_name in chunk:
                 futures.append(executor.submit(scrape_subreddit, subreddit_name, keywords, output_dir,
-                                               target_size_bytes, seen_ids, lock, file_index))
+                                               target_size_bytes, seen_ids, lock, rate_limit, file_index))
                 
         # Wait for all threads to complete and compute the total size.
         total_size = sum(f.result() for f in futures if f.result() is not None)

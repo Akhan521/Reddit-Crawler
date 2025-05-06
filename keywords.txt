@@ -1,102 +1,127 @@
-programming
-coding
+tutorial
+project
+beginner
+bug
+debugging
+snippet
+library
+framework
+dependency
+syntax
+function
+object
+class
+OOP
+variable
+loop
+array
+API
+REST
+IDE
+VSCode
+Git
+version control
+CI/CD
+deployment
+refactor
+algorithm
+compiler
+runtime
+stack overflow
+code review
+open source
+terminal
+script
+regex
+CLI
+repository
+issue
+feature request
+patch
+pull request
 python
-java
-javascript
-cpp
-csharp
-golang
-ruby
-sql
-nosql
-backend
-frontend
-fullstack
-react
-angular
-vue
-node
-django
-flask
-spring
-dotnet
-kubernetes
-aws
-azure
-gcp
-security
-ethical hacking
-git
-cicd
-testing
-uiux
-graphql
-microservices
-serverless
-iot
-blockchain
-game ai
-reinforcement learning
-statistics
-data visualization
-kaggle
-huggingface
-large language models
-generative ai
-ai ethics
-prompt engineering
-mlops
-edge computing
-quantum computing
-bioinformatics
-r programming
-object oriented
-functional programming
-api
-rest
-microservices
-docker
-kubernetes
-cloud
-devops
-software engineering
-web development
-mobile development
-data science
-machine learning
-deep learning
-neural networks
+pandas
+numpy
+scikit-learn
 tensorflow
 pytorch
+keras
+model
+training
+testing
+dataset
+label
+classification
+regression
+clustering
 nlp
-computer vision
-data engineering
-big data
-data analysis
-algorithm
-data structure
-optimization
-debugging
-automation
-version control
-agile
-scrum
-unit testing
-integration testing
-performance tuning
-code review
-software design
-architecture
-deployment
-continuous integration
-continuous deployment
-machine learning models
+chatbot
+openai
+prompt
+tokenization
 feature engineering
 data preprocessing
-model training
-hyperparameter tuning
-evaluation metrics
-natural language processing
-image recognition
-predictive analytics
-real time processing
+loss function
+activation
+gradient
+backpropagation
+neural network
+cnn
+rnn
+transformer
+huggingface
+inference
+overfitting
+underfitting
+cross-validation
+notebook
+jupyter
+colab
+dataframe
+csv
+EDA
+pivot table
+vlookup
+formula
+spreadsheet
+dashboard
+powerbi
+tableau
+dax
+kpi
+visualization
+bar chart
+normalization
+aggregation
+schema
+portfolio
+resume
+job search
+interview
+behavioral
+leetcode
+hiring
+internship
+career change
+job offer
+salary
+promotion
+layoff
+remote job
+networking
+freelance
+upwork
+fiverr
+contract
+cover letter
+time management
+deep work
+focus
+Pomodoro
+task
+routine
+habit
+discipline
+motivation
+goal setting
+productivity tools
