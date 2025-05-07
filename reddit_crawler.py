@@ -79,7 +79,7 @@ def enrich_post_with_titles(post):
     return post
 
 # Save posts to a JSON file.
-def save_posts(posts, file_index, output_dir, title):
+def save_posts(posts, file_index, output_dir, title, target_size_bytes):
     # Create the output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
 
@@ -92,8 +92,14 @@ def save_posts(posts, file_index, output_dir, title):
         for post in posts:
             f.write(json.dumps(post, ensure_ascii=False) + '\n')
 
-    # Return the file size.
-    return os.path.getsize(filepath)
+    file_size = os.path.getsize(filepath)
+    # If we've reached our target size, we can stop all threads.
+    with global_lock:
+        global_size[0] += file_size
+        if global_size[0] >= target_size_bytes:
+            stop_flag[0] = True
+    return file_size
+
 
 # Function to load subreddits from a subreddits file.
 def load_subreddits(file_path):
@@ -154,8 +160,8 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
     reddit = praw.Reddit("DEFAULT")
     current_posts = []
     total_size = 0 # Total size of scraped data.
-    post_limit = 10000
-    streams = ['hot', 'top', 'new']
+    post_limit = 10000 # Limit for the number of posts to store in files.
+    streams = ['hot', 'top', 'new', 'rising'] # Streams to scrape from.
     file_index = 1 # File index for saving posts.
     counter = 1 # Counter for the number of posts processed.
     
@@ -184,12 +190,18 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
             # Acquire the rate limiter before making a request.
             rate_limiter.acquire()
             # Scrape posts from the subreddit stream.
-            for post in getattr(subreddit, stream)(limit=post_limit * 5):
+            for post in getattr(subreddit, stream)(limit=None):
                 counter += 1
                 if counter % 100 == 0:
                     print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     print(f"Thread: processed {counter} posts from r/{subreddit_name.strip()}...")
                     time.sleep(1) # After every 100 posts, sleep for 1 second to avoid overwhelming the server.
+
+                # Check if we should stop scraping.
+                with global_lock:
+                    if stop_flag[0]:
+                        print(f"Thread: stopping scraping for r/{subreddit_name.strip()} due to reaching target size.")
+                        return total_size
 
                 content = post.title.lower() + ' ' + post.selftext.lower()
                 if any(keyword.lower() in content for keyword in keywords):
@@ -215,7 +227,7 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
                     rate_limiter.acquire()
                     try:
                         # Scrape the comments from the post.
-                        post.comments.replace_more(limit=10)
+                        post.comments.replace_more(limit=50)
                     except prawcore.exceptions.RequestException as e:
                         print(f"Skipping comments for post {post.id} in r/{subreddit_name.strip()} due to error: {e}")
                         continue
@@ -234,11 +246,17 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
 
                     # Check file size and save if necessary (~10MB).
                     if len(current_posts) >= post_limit:
-                        file_size = save_posts(current_posts, file_index, output_dir, title)
+                        file_size = save_posts(current_posts, file_index, output_dir, title, target_size_bytes)
                         total_size += file_size
                         print(f"Thread: saved {len(current_posts)} items to reddit_posts_{title}_{file_index}.json ({file_size / (1024 * 1024):.2f} MB)")
                         current_posts = []
                         file_index += 1
+
+                        # Check if we should stop scraping.
+                        with global_lock:
+                            if stop_flag[0]:
+                                print(f"Thread: stopping scraping for r/{subreddit_name.strip()} due to reaching target size.")
+                                return total_size
 
                 # If we reached the target size, break out of the loop.
                 if total_size >= target_size_bytes:
@@ -256,7 +274,7 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
 
     # If there are any remaining posts, save them.
     if current_posts:
-        file_size = save_posts(current_posts, file_index, output_dir, title)
+        file_size = save_posts(current_posts, file_index, output_dir, title, target_size_bytes)
         total_size += file_size
         print(f"Thread: saved {len(current_posts)} items to reddit_posts_{title}_{file_index}.json ({file_size / (1024 * 1024):.2f} MB)")
         file_index += 1
@@ -334,6 +352,11 @@ def scrape_reddit():
     # Print the total size of the scraped data.
     print(f"Total size of scraped data: {total_size / (1024 * 1024):.2f} MB")
     print(f"Scraping finished at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# Global shared variables for tracking total size across threads.
+global_size = [0]
+global_lock = Lock()
+stop_flag = [False] # Flag to stop threads if target size is reached.
 
 if __name__ == "__main__":
     # Call our scrape_reddit function to start the scraping process.
