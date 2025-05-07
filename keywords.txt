@@ -100,3 +100,55 @@ natural language processing
 image recognition
 predictive analytics
 real time processing
+technology  
+science  
+space  
+history  
+news  
+politics  
+funny  
+meme  
+joke  
+cute  
+animal  
+dog  
+cat  
+DIY  
+project  
+recipe  
+cooking  
+food  
+book  
+review  
+movie  
+film  
+music  
+song  
+album  
+gaming  
+video game  
+console  
+PC  
+question  
+advice  
+relationship  
+data  
+visualization  
+infographic  
+study  
+research  
+experiment  
+discovery  
+spaceX  
+NASA  
+stars  
+universe  
+environment  
+earth  
+nature  
+photo  
+image  
+story  
+fact  
+TIL  
+AMA
