@@ -20,7 +20,8 @@ import re
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor
-from threading import Lock, Semaphore
+from threading import Lock
+
 # Set up command line argument parsing.
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Reddit Crawler')
@@ -78,19 +79,18 @@ def enrich_post_with_titles(post):
     return post
 
 # Save posts to a JSON file.
-def save_posts(posts, file_index, output_dir, lock):
+def save_posts(posts, file_index, output_dir, title):
     # Create the output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
 
     # Our filepath:
-    filepath = os.path.join(output_dir, f'reddit_posts_{file_index}.json')
+    filepath = os.path.join(output_dir, f'reddit_posts_{title}_{file_index}.json')
 
     # Save the posts to a JSON file.
     # To ensure thread safety, we use a lock.
-    with lock:
-        with open(filepath, 'a', encoding='utf-8') as f:
-            for post in posts:
-                f.write(json.dumps(post, ensure_ascii=False) + '\n')
+    with open(filepath, 'a', encoding='utf-8') as f:
+        for post in posts:
+            f.write(json.dumps(post, ensure_ascii=False) + '\n')
 
     # Return the file size.
     return os.path.getsize(filepath)
@@ -132,18 +132,41 @@ def load_existing_post_ids(output_dir):
                         continue
     return seen_ids
 
+# Custom Rate Limiter class to handle Reddit API rate limits.
+class RateLimiter:
+    def __init__(self, requests_per_min):
+        self.requests_per_min = requests_per_min
+        self.interval = 60.0 / requests_per_min # Time interval between requests in seconds.
+        self.last_request_time = 0
+        self.lock = Lock()
+
+    def acquire(self):
+        with self.lock:
+            current_time = time.time()
+            elapsed_time = current_time - self.last_request_time
+            if elapsed_time < self.interval:
+                # If we are within the rate limit, sleep for the remaining time.
+                time.sleep(self.interval - elapsed_time)
+            self.last_request_time = time.time()
+
 # Threading: function to scrape a subreddit per thread.
-def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, seen_ids, lock, file_index):
+def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, seen_ids, rate_limiter):
     reddit = praw.Reddit("DEFAULT")
     current_posts = []
-    total_size = 0
+    total_size = 0 # Total size of scraped data.
     post_limit = 10000
     streams = ['hot', 'top', 'new']
+    file_index = 1 # File index for saving posts.
+    counter = 1 # Counter for the number of posts processed.
     
     try:
+        # Acquire the rate limiter before making a request.
+        rate_limiter.acquire()
         # Attempt to access the subreddit.
         subreddit = reddit.subreddit(subreddit_name.strip())
-        next(subreddit.hot(limit=1))  # Test subreddit accessibility.
+        rate_limiter.acquire()
+        # Check if the subreddit is valid and accessible.
+        next(subreddit.hot(limit=1)) 
     except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
         print(f"Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
         return 0
@@ -151,11 +174,23 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
         print(f"Error accessing subreddit '{subreddit_name.strip()}': {e}")
         return 0
 
+    # Set the title (to be used in our filename).
+    title = subreddit_name.strip().replace('/', '_')
+
     # Scrape posts from multiple streams (hot, new, top).
     for stream in streams:
         print(f"Thread: scraping {stream} posts from r/{subreddit_name.strip()}...")
         try:
+            # Acquire the rate limiter before making a request.
+            rate_limiter.acquire()
+            # Scrape posts from the subreddit stream.
             for post in getattr(subreddit, stream)(limit=post_limit * 5):
+                counter += 1
+                if counter % 100 == 0:
+                    print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"Thread: processed {counter} posts from r/{subreddit_name.strip()}...")
+                    time.sleep(1) # After every 100 posts, sleep for 1 second to avoid overwhelming the server.
+
                 content = post.title.lower() + ' ' + post.selftext.lower()
                 if any(keyword.lower() in content for keyword in keywords):
                     # Check if the post ID is already in the seen IDs set.
@@ -176,8 +211,15 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
                     current_posts.append(post_data)
                     seen_ids.add(post.id)
 
-                    # Scraping comments.
-                    post.comments.replace_more(limit=10)
+                    # Acquire the rate limiter before making a request.
+                    rate_limiter.acquire()
+                    try:
+                        # Scrape the comments from the post.
+                        post.comments.replace_more(limit=10)
+                    except prawcore.exceptions.RequestException as e:
+                        print(f"Skipping comments for post {post.id} in r/{subreddit_name.strip()} due to error: {e}")
+                        continue
+
                     for comment in post.comments.list():
                         if comment.id in seen_ids:
                             continue
@@ -192,13 +234,11 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
 
                     # Check file size and save if necessary (~10MB).
                     if len(current_posts) >= post_limit:
-                        # To ensure thread safety, we use a lock.
-                        with lock:
-                            file_size = save_posts(current_posts, file_index[0], output_dir, lock)
-                            total_size += file_size
-                            print(f"Thread: saved {len(current_posts)} items to reddit_posts_{file_index[0]}.json ({file_size / (1024 * 1024):.2f} MB)")
-                            current_posts = []
-                            file_index[0] += 1
+                        file_size = save_posts(current_posts, file_index, output_dir, title)
+                        total_size += file_size
+                        print(f"Thread: saved {len(current_posts)} items to reddit_posts_{title}_{file_index}.json ({file_size / (1024 * 1024):.2f} MB)")
+                        current_posts = []
+                        file_index += 1
 
                 # If we reached the target size, break out of the loop.
                 if total_size >= target_size_bytes:
@@ -212,14 +252,14 @@ def scrape_subreddit(subreddit_name, keywords, output_dir, target_size_bytes, se
         # If we reached the target size, break out of the loop.
         if total_size >= target_size_bytes:
             break
+        time.sleep(3) # Add a delay between streams to avoid overwhelming the server.
 
     # If there are any remaining posts, save them.
     if current_posts:
-        with lock:
-            file_size = save_posts(current_posts, file_index[0], output_dir, lock)
-            total_size += file_size
-            print(f"Thread: saved {len(current_posts)} items to reddit_posts_{file_index.value}.json ({file_size / (1024 * 1024):.2f} MB)")
-            file_index[0] += 1
+        file_size = save_posts(current_posts, file_index, output_dir, title)
+        total_size += file_size
+        print(f"Thread: saved {len(current_posts)} items to reddit_posts_{title}_{file_index}.json ({file_size / (1024 * 1024):.2f} MB)")
+        file_index += 1
 
     return total_size
 
@@ -244,14 +284,37 @@ def scrape_reddit():
     # Create the output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
 
-    # Create a lock for thread safety.
-    lock = Lock()
-
     # Initialize variables.
-    file_index = [300] # Using a list to make it mutable in threads.
     seen_ids = load_existing_post_ids(output_dir)
+    rate_limiter = RateLimiter(requests_per_min=60)  # Set the rate limit to 60 requests per minute.
 
     print(f"Scraping started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Validate subreddits.
+    valid_subreddits = []
+    for subreddit_name in subreddits:
+        try:
+            # Acquire the rate limiter before making a request.
+            rate_limiter.acquire()
+            # Attempt to access the subreddit.
+            subreddit = reddit.subreddit(subreddit_name.strip())
+            rate_limiter.acquire()
+            # Check if the subreddit is valid and accessible.
+            next(subreddit.hot(limit=1)) 
+            valid_subreddits.append(subreddit_name.strip())
+        except (prawcore.exceptions.NotFound, prawcore.exceptions.Forbidden, prawcore.exceptions.Redirect) as e:
+            print(f"Pre-validation: Skipping invalid subreddit '{subreddit_name.strip()}': {e}")
+        except prawcore.exceptions.RequestException as e:
+            print(f"Error accessing subreddit '{subreddit_name.strip()}': {e}")
+            continue
+
+    # If no valid subreddits were found, exit the program.
+    if not valid_subreddits:
+        print("No valid subreddits found. Exiting.")
+        return
+    
+    print(f"Found {len(valid_subreddits)} valid subreddits out of {len(subreddits)}.")
+    subreddits = valid_subreddits
 
     # Split the subreddits into chunks for threading.
     num_threads = min(5, len(subreddits)) # Limit to 5 threads.
@@ -263,7 +326,7 @@ def scrape_reddit():
         for i, chunk in enumerate(subreddit_chunks):
             for subreddit_name in chunk:
                 futures.append(executor.submit(scrape_subreddit, subreddit_name, keywords, output_dir,
-                                               target_size_bytes, seen_ids, lock, file_index))
+                                               target_size_bytes, seen_ids, rate_limiter))
                 
         # Wait for all threads to complete and compute the total size.
         total_size = sum(f.result() for f in futures if f.result() is not None)
