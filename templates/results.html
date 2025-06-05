@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Search Results</title>
+</head>
+<body>
+    <h1>Search Results for "{{ query }}"</h1>
+    {% if results %}
+        <ul>
+        {% for result in results %}
+            <li>
+                <strong>Score:</strong> {{ result.score }}<br>
+                <strong>Title:</strong> {{ result.title or 'N/A' }}<br>
+                <strong>Username:</strong> {{ result.username or 'N/A' }}<br>
+                <strong>Body:</strong> {{ result.body or 'N/A' }}<br>
+            </li>
+            <hr>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No results found.</p>
+    {% endif %}
+    <a href="/">Back to search</a>
+</body>
+</html>
