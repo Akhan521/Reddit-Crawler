@@ -61,7 +61,7 @@ We wanted to build a lightweight Reddit crawler and search engine from scratch. 
 - Building a Flask app that integrates with a search backend
 
 ### Collaboration & Design
-- Designing around **modularity** — each script has a single responsibility
+- Designing around **modularity** (each script has a single responsibility)
 - Coordinating shared global states and safe multi-threading with locks
 - Handling I/O errors and edge cases in real-world data
 - Writing tools that are easy for others to use (via bash scripts + argument parsing)
@@ -84,3 +84,128 @@ Reddit-Search-App/
 ├── keywords.txt              # List of filter keywords
 ├── .gitignore
 └── README.md
+```
+
+---
+
+## 🛠️ Getting Started
+
+Follow the steps below to run the project on your machine.
+
+### ✅ Prerequisites
+
+Ensure the following are installed:
+
+- **Python 3.8+**
+- **Java 11+**
+- **[PyLucene](https://dlcdn.apache.org/lucene/pylucene/)**: for info on how to install and configure PyLucene, [click here](https://lucene.apache.org/pylucene/install.html).
+- Python libraries:
+  - `praw`
+  - `flask`
+  - `bs4`
+  - `pandas`
+  - `requests`
+
+0. Install the Python Libraries Using:
+
+   ```bash
+   pip install praw flask beautifulsoup4 pandas requests
+   ```
+
+1. Clone the Repository
+   ```bash
+   git clone https://github.com/Akhan521/Reddit-Crawler.git
+   cd Reddit-Crawler
+   ```
+2. Prepare Input Files
+   Make sure the following input files exist:
+
+   - subreddits.txt: each line contains a subreddit name (e.g. technology)
+   - keywords.txt: each line contains a keyword to filter Reddit posts
+  
+   You should also create an empty folder where scraped data will be saved:
+   ```bash
+   mkdir reddit_data
+   ```
+
+3. Run the Reddit Crawler
+   Use the provided shell script:
+   ```bash
+   /crawler.sh subreddits.txt keywords.txt reddit_data 30
+   ```
+   > Note: The last argument is the size (in MB) of data you want to collect (e.g. 30 MB of data).
+   
+   This will:
+     - Scrape Reddit posts/comments across hot, top, new, and rising
+     - Save ~10MB JSON chunks to the reddit_data folder
+     - Enrich posts by extracting titles from linked pages
+     - Stop once it collects at least 30MB of data (adjustable)
+  
+4. Index the Data with PyLucene
+   Once data is collected, index it using:
+   ```bash
+   python3 indexer.py
+   ```
+
+   This script:
+     - Reads all .json files from the reddit_data/ folder
+     - Builds a Lucene index for our search engine
+     - Indexes fields like title, body, author, subreddit, and score
+  
+5. Launch the Search App
+   To start the web UI:
+   ```bash
+   python3 search_app.py
+   ```
+
+   Then open your browser and go to:
+   ```bash
+   http://localhost:5000
+   ```
+
+   You can now:
+     - Type search queries into the interface
+     - Get the top 10 Reddit matches with title, author, and body
+     - Click “Back to Search” to run another query
+  
+6. Optional: Customize Your Crawl
+   - Add more subreddits to subreddits.txt
+   - Add new filters to keywords.txt
+   - Increase or decrease target scrape size by modifying the last argument (e.g., 30 = 30MB)
+  
+---
+
+## 💡 Reflections
+
+This project taught us how to build a working IR system, including crawling, parsing, indexing, and querying real-world Reddit data. We:
+  - Gained hands-on experience with multi-threaded scraping and API rate limiting
+  - Learned how to use Apache Lucene via PyLucene for indexing and searching large corpora
+  - Built a lightweight search app to visualize results of scraping
+  - Applied error handling and clean code structure for scalability and modularity
+
+Most importantly, we deepened our understanding of information retrieval, and how data pipelines can power real-time search over unstructured content.
+
+---
+
+## 👤 Authors
+
+- **Aamir Khan**  
+  💻 [GitHub](https://github.com/Akhan521)
+
+- **Ihsan Sarwar**  
+  💻 [GitHub](https://github.com/IhsanSarwar)
+
+- **Jyro Jimenez**  
+  💻 [GitHub](https://github.com/jyroball)
+
+- **Jonathan Jin**  
+  💻 [GitHub](https://github.com/jjin1407)
+
+---
+
+## ⭐ Support Us
+
+If you found this project interesting, feel free to ⭐ the repository! Thank you for your time and for reading about our project.
+
+We’d love to hear your feedback, questions, and ideas, so reach out anytime.
+   
