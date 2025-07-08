@@ -28,7 +28,7 @@ We wanted to build a lightweight Reddit crawler and search engine from scratch. 
 
 ## ⚙️ Tech Stack
 
-- **Python 3**: Reddit crawling, data preprocessing, and Flask web server
+- **Python**: Reddit crawling, data preprocessing, and Flask web server
 - **PRAW**: Python Reddit API Wrapper
 - **ThreadPoolExecutor**: Parallel subreddit crawling
 - **Apache Lucene + PyLucene**: Powerful full-text indexing and search
