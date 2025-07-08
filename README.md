@@ -1,4 +1,4 @@
-# 🔎 Reddit Crawler & Search App
+# 🕷️ Reddit Crawler & Search App
 
 **An end-to-end Reddit crawler and search engine** that scrapes Reddit posts, filters them by keywords, enriches with external page titles, and enables full-text search using PyLucene, all wrapped in a minimal, searchable web app.
 
@@ -92,7 +92,7 @@ Reddit-Search-App/
 
 Follow the steps below to run the project on your machine.
 
-### ⚠️ Note: Crawling-Only Users
+### 🕸️ Note: Crawling-Only Users
 
 If you **only want to crawl Reddit data** and are **not interested in searching through it using our web app**, you can **skip all steps involving PyLucene setup** and the **Flask search interface**.
 
