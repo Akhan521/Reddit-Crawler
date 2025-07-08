@@ -117,18 +117,19 @@ Ensure the following are installed:
   - `pandas`
   - `requests`
 
-0. Install the Python Libraries Using:
+0. Install Python Libraries Using:
 
    ```bash
    pip install praw flask beautifulsoup4 pandas requests
    ```
 
-1. Clone the Repository
+1. Clone The Repository
    ```bash
    git clone https://github.com/Akhan521/Reddit-Crawler.git
    cd Reddit-Crawler
    ```
 2. Prepare Input Files
+   
    Make sure the following input files exist:
 
    - subreddits.txt: each line contains a subreddit name (e.g. technology)
@@ -139,7 +140,8 @@ Ensure the following are installed:
    mkdir reddit_data
    ```
 
-3. Run the Reddit Crawler
+4. Run The Reddit Crawler
+   
    Use the provided shell script:
    ```bash
    /crawler.sh subreddits.txt keywords.txt reddit_data 30
@@ -152,7 +154,8 @@ Ensure the following are installed:
      - Enrich posts by extracting titles from linked pages
      - Stop once it collects at least 30MB of data (adjustable)
   
-4. Index the Data with PyLucene
+5. Index the Data with PyLucene
+   
    Once data is collected, index it using:
    ```bash
    python3 indexer.py
@@ -163,7 +166,8 @@ Ensure the following are installed:
      - Builds a Lucene index for our search engine
      - Indexes fields like title, body, author, subreddit, and score
   
-5. Launch the Search App
+7. Launch the Search App
+   
    To start the web UI:
    ```bash
    python3 search_app.py
@@ -179,7 +183,7 @@ Ensure the following are installed:
      - Get the top 10 Reddit matches with title, author, and body
      - Click “Back to Search” to run another query
   
-6. Optional: Customize Your Crawl
+9. (Optional) Customize Your Crawl
    - Add more subreddits to subreddits.txt
    - Add new filters to keywords.txt
    - Increase or decrease target scrape size by modifying the last argument (e.g., 30 = 30MB)
