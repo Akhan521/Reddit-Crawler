@@ -205,7 +205,7 @@ Most importantly, we deepened our understanding of information retrieval, and ho
 
 ## ⭐ Support Us
 
-If you found this project interesting, feel free to ⭐ the repository! Thank you for your time and for reading about our project.
+If you found this project interesting, feel free to ⭐ the repository! Thank you for your time and reading about our project.
 
 We’d love to hear your feedback, questions, and ideas, so reach out anytime.
    
