@@ -92,6 +92,17 @@ Reddit-Search-App/
 
 Follow the steps below to run the project on your machine.
 
+### ⚠️ Note: Crawling-Only Users
+
+If you **only want to crawl Reddit data** and are **not interested in searching through it using our web app**, you can **skip all steps involving PyLucene setup** and the **Flask search interface**.
+
+In other words:
+- You **do not need PyLucene** if you're only crawling.
+- You **do not need to run** the indexing script (`indexer.py`) or the web app (`search_app.py`).
+- Just follow the instructions to run `crawler.sh` with the provided arguments (see steps 0-3).
+
+This makes the project easier to use for data gathering without requiring any Java or Lucene installation.
+
 ### ✅ Prerequisites
 
 Ensure the following are installed:
