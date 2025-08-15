@@ -51,6 +51,12 @@ We wanted to build a lightweight Reddit crawler and search engine from scratch. 
 
 ---
 
+## 🖥️ Demo
+
+https://github.com/user-attachments/assets/98df88a3-2e69-4b7f-9e23-d682d4c1b21b
+
+---
+
 ## 🔎 What We Learned
 
 ### Technical Lessons
@@ -204,21 +210,11 @@ Most importantly, we deepened our understanding of information retrieval, and ho
 
 ## 👤 Authors
 
-- **Aamir Khan**  
-  💻 [GitHub](https://github.com/Akhan521)
-
-- **Ihsan Sarwar**  
-  💻 [GitHub](https://github.com/IhsanSarwar)
-
-- **Jyro Jimenez**  
-  💻 [GitHub](https://github.com/jyroball)
-
-- **Jonathan Jin**  
-  💻 [GitHub](https://github.com/jjin1407)
+**Aamir Khan**: [GitHub](https://github.com/Akhan521) || **Ihsan Sarwar**: [GitHub](https://github.com/IhsanSarwar) || **Jyro Jimenez**: [GitHub](https://github.com/jyroball) || **Jonathan Jin**: [GitHub](https://github.com/jjin1407)
 
 ---
 
-## ⭐ Support Us
+## Support Us!
 
 If you found this project interesting, feel free to ⭐ the repository! Thank you for your time and reading about our project.
 
